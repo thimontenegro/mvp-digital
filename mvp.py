@@ -13,7 +13,7 @@ import string
 from PIL import Image
 from wordcloud import WordCloud, STOPWORDS, ImageColorGenerator
 import numpy as np
-
+nltk.download('punkt')
 class Predictor():
     def __init__(self, df):
         with open('model_sent_3011','rb') as f:
