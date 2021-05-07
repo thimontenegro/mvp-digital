@@ -13,7 +13,10 @@ import string
 from PIL import Image
 from wordcloud import WordCloud, STOPWORDS, ImageColorGenerator
 import numpy as np
+from io import BytesIO
+import base64
 nltk.download('punkt')
+
 class Predictor():
     def __init__(self, df):
         with open('model_sent_3011','rb') as f:
@@ -79,6 +82,19 @@ class TextHandler():
         text = re.sub('\w*\d\w*', '', text) # removendo digitos
         text = re.sub('\n', '', text) # Removendo quebras de linha
         return text
+    
+    def to_excel(self,df):
+        output = BytesIO()
+        writer = pd.ExcelWriter(output, engine = 'xlsxwriter')
+        df.to_excel(writer, sheet_name='Planilha1',index = False)
+        writer.save()
+        processed_data = output.getvalue()
+        return processed_data
+ 
+    def get_table_download_link(self,df):
+        val = self.to_excel(df)
+        b64 = base64.b64encode(val)
+        return f'<a href="data:application/octet-stream;base64,{b64.decode()}" download="extract.xlsx">Download</a>'
             
     def word_tokenizer(self, text,top_n):
         text = text.str.cat(sep = ' ')
@@ -94,7 +110,8 @@ class Application():
         self.text_handler = TextHandler(self.df)
         self.predictor = Predictor(self.df)
     def render_header(self):
-        st.markdown('<h1 style = "border-radius: 50px; color: #FFFFFF;text-align:center;text-transform: uppercase; background:-webkit-linear-gradient(#FD6E1B, #DB2F40);">Digital Influencers </h1>',unsafe_allow_html=True)
+        st.image('assets/di_produto_rank.png')
+        st.markdown('<h1 style = "border-radius: 50px; color: #FFFFFF;text-align:center;text-transform: uppercase; background:-webkit-linear-gradient(#FD6E1B, #DB2F40);">Análise de Comentários - MVP</h1>',unsafe_allow_html=True)
         st.text("")
         st.text("")
         st.markdown("<p style = 'text-align: center; color: #7E7E7E; font-size: 20px'> Lorem Ipsum is simply dummy text of the printing and typesetting industry. Lorem Ipsum has been the industry's standard dummy</p>", unsafe_allow_html=True )
@@ -104,7 +121,7 @@ class Application():
         flag = False
         uploaded_file = st.file_uploader(label = "Arraste o arquivo", type = 'xlsx')
         if uploaded_file is not None:
-            df = pd.read_excel(uploaded_file, usecols = ['DATE','Comentario'], sheet_name = 'Comentários')
+            df = pd.read_excel(uploaded_file, usecols = ['Usuario','Comentario','Repeticao'], sheet_name = 'Comentários')
             self.df = df
             flag = True
         return flag
@@ -131,25 +148,9 @@ class Application():
                                                  scale = alt.Scale(range = palette))).\
                     configure_axisX(labelAngle=315).properties(title = 'Palavras Mais Frequentes')
         st.altair_chart(c, use_container_width=True)
-        
-        st.markdown('<p style ="color: #7E7E7E; text-align: center"> Informe a palavra desejada, parar ver sua frequência diária: </p>',unsafe_allow_html = True),
-        palavra = st.text_input("", words_common['Palavra'][0])
-        palavra = palavra.lower()
-        palavra = self.text_handler.strip_accents(palavra)
-        palavra_cont = self.df[['DATE', 'Comentario']]
-        palavra_cont['Comentario'] = palavra_cont['Comentario'].str.lower()
-        palavra_cont['Comentario'] = palavra_cont['Comentario'].apply(self.text_handler.strip_accents)
-        palavra_cont['Quantidade'] = palavra_cont['Comentario'].str.count(palavra)
-        palavra_cont = palavra_cont[['DATE', 'Quantidade']]
-        contagem = (palavra_cont['Quantidade'].gt(0)).groupby(palavra_cont['DATE']).sum().to_frame(palavra).reset_index()
-        contagem[palavra] = contagem[palavra].astype(int)
-        
-        time_series_graph = alt.Chart(contagem).\
-                                mark_trail().\
-                                encode(x = alt.X('DATE:T', axis = alt.Axis(title = 'Dias',grid = False)), 
-                                        y = alt.Y(palavra, axis = alt.Axis(title = 'Ocorrência por Palavra',grid = False)),
-                                        size = palavra, color = alt.value('#FD6E1B')).properties(title = 'Número de Ocorrências por Dia')                                           
-        st.altair_chart(time_series_graph, use_container_width = True)                    
+        st.markdown(self.text_handler.get_table_download_link(words_common), unsafe_allow_html=True)
+
+                         
 
     def render_hashtags_users_counters(self):
         st.markdown("<h3 style = 'text-align: center; color: #FD6E1B; font-size: 30px'> Contador de Hashtags </h3>",unsafe_allow_html= True)
@@ -164,29 +165,38 @@ class Application():
         hashtags_dist = nltk.FreqDist(hashtags)
             
         hashtags_common = pd.DataFrame(hashtags_dist.most_common(top_numbers), columns=['Palavra', 'Quantidade'])
-            
-        c = alt.Chart(hashtags_common).mark_bar().encode(
-                x = alt.Y("Palavra", sort = '-y',axis = alt.Axis(title = 'Hashtag',grid = False)),
-                y = 'Quantidade', tooltip = ['Palavra','Quantidade'],color = alt.value("#FD6E1B"),
-        ).properties(title = 'Hashtags mais mencionadas', width = 400,
-                         height = 400).configure_axisX(labelAngle=315)
-        st.altair_chart(c,use_container_width = True)
-            
+        col1, col2 = st.beta_columns([3,1])
+        with col1:    
+            c = alt.Chart(hashtags_common).mark_bar().encode(
+                    x = alt.Y("Palavra", sort = '-y',axis = alt.Axis(title = 'Hashtag',grid = False)),
+                    y = 'Quantidade', tooltip = ['Palavra','Quantidade'],color = alt.value("#FD6E1B"),
+            ).properties(title = 'Hashtags mais mencionadas', width = 400,
+                            height = 400).configure_axisX(labelAngle=315)
+            st.altair_chart(c,use_container_width = True)
+        with col2:
+            st.table(hashtags_common)
+            st.markdown(self.text_handler.get_table_download_link(hashtags_common), unsafe_allow_html=True)
         #########################
-        st.markdown("<h3 style = 'text-align: center'> Contador de @Mentions </h3>", unsafe_allow_html=True )
+        st.markdown("<h3 style = 'text-align: center; color: #FD6E1B; font-size:30px'> Usuários mais mencionados</h3>", unsafe_allow_html=True )
         #p = re.compile(r'@([^\s:]+)')
+        col1, col2 = st.beta_columns([3,1])
         txt_mentions = txt.str.cat(sep = " ")
         mentions = [i for i in txt_mentions.split() if i.startswith('@')]
         mentions_list = nltk.FreqDist(mentions)
         mentions_list = pd.DataFrame(mentions_list.most_common(top_numbers), columns=['Palavra', 'Quantidade'])
-        c = alt.Chart(mentions_list).mark_bar().encode(
-                x = alt.Y("Palavra", sort = '-y',axis = alt.Axis(title = 'Usuário',grid = False)),
-                y = 'Quantidade', tooltip = ['Palavra','Quantidade'], color = alt.value("#FD6E1B")
-        ).configure_axisX(labelAngle=315).properties(width = 400,
-                         height = 400).properties(title = 'Usuários mais mencionados')
-            
-        st.altair_chart(c,use_container_width = True)
-        
+        with col1:
+            c = alt.Chart(mentions_list).mark_bar().encode(
+                    x = alt.Y("Palavra", sort = '-y',axis = alt.Axis(title = 'Usuário',grid = False)),
+                    y = 'Quantidade', tooltip = ['Palavra','Quantidade'], color = alt.value("#FD6E1B")
+            ).configure_axisX(labelAngle=315).properties(width = 400,
+                            height = 400).properties(title = 'Usuários mais mencionados')
+                
+            st.altair_chart(c,use_container_width = True)
+        with col2:
+            st.markdown("<p style = 'text-align: center'>Preview Usuários mais mencionados</p>", unsafe_allow_html= True)
+            st.table(mentions_list.head(5))
+            st.markdown(self.text_handler.get_table_download_link(mentions_list), unsafe_allow_html=True)
+
         
     def render_sentimentation(self):
         def make_prediction_sent(text):   
@@ -214,8 +224,7 @@ class Application():
         st.markdown("<h3 style = 'text-align: center'> Sentimentação </h3>", unsafe_allow_html=True)
         reviews = self.df['Comentario']
         reviews_sent = make_prediction_sent(reviews)
-        reviews_done = pd.DataFrame({'Data': self.df['DATE'],
-		'Review': self.df['Comentario'],
+        reviews_done = pd.DataFrame({'Review': self.df['Comentario'],
 		'Sentimentação': reviews_sent})
           
         st.markdown('<style>.positivos{color: #77EB30; font-size: 24px; font-weight: bold, border-right: 5px solid orange;}</style>', unsafe_allow_html=True)
