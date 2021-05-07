@@ -36,7 +36,7 @@ class Predictor():
         text = text.apply(self.text_handler.clean_text_to_sentimentation(text))
         result = self.model.predict(text)
         return result 
-    #sasasa
+    
 class TextHandler():
     def __init__(self, df):
         self.df = df
@@ -180,11 +180,11 @@ class Application():
         st.markdown(self.text_handler.get_table_download_link(words_common), unsafe_allow_html=True)
 
     def render_hashtags_users_counters(self):
+        top_numbers = st.slider('', 0, 30,10, key ='2')
         st.markdown("<h3 style = 'text-align: center; color: #FD6E1B; font-size: 30px'> Contador de Hashtags </h3>",unsafe_allow_html= True)
         st.markdown("<p style = 'text-align: center; color: #7E7E7E; font-size:20px'> Levantamento da frequência de hashtags e usuário.Selecione no slider abaixo, a quantidade de palavras para exibição. Clique no botão abaixo, para download da planilha com esta métrica.</p>", unsafe_allow_html=True )
 
         st.markdown('<p style ="color: #7E7E7E; text-align: center; font-size: 15px"> Arraste para o valor desejado, entre 0 à 30: </p>',unsafe_allow_html = True),
-        top_numbers = st.slider('', 0, 30,10, key ='2')
         txt = self.df['Comentario']
             
         txt_hash = txt.str.cat(sep = " ")
@@ -192,7 +192,6 @@ class Application():
         hashtags = [i for i in txt_hash.split() if i.startswith('#')]
             
         hashtags_dist = nltk.FreqDist(hashtags)
-            
         hashtags_common = pd.DataFrame(hashtags_dist.most_common(top_numbers), columns=['Palavra', 'Quantidade'])
         col1, col2 = st.beta_columns([3,1])
         with col1:    
