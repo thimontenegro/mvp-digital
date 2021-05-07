@@ -36,7 +36,7 @@ class Predictor():
         text = text.apply(self.text_handler.clean_text_to_sentimentation(text))
         result = self.model.predict(text)
         return result 
-    
+    #sasasa
 class TextHandler():
     def __init__(self, df):
         self.df = df
