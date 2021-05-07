@@ -140,7 +140,7 @@ class Application():
         flag = False
         uploaded_file = st.file_uploader(label = "Arraste o arquivo", type = 'xlsx')
         if uploaded_file is not None:
-            df = pd.read_excel(uploaded_file, usecols = ['Usuario','Comentario','Repeticao'], sheet_name = 'Comentários')
+            df = pd.read_excel(uploaded_file,)
             self.df = df
             flag = True
         return flag
@@ -283,18 +283,19 @@ class Application():
     #st.set_option('deprecation.showPyplotGlobalUse', False)
     
     def render_wordcloud(self, reviews_done):
-        freq_pos = self.text_handler.get_freq_words(reviews_done, 'Positive',reviews_done.shape[0])
-        freq_neg = self.text_handler.get_freq_words(reviews_done,'Negative',reviews_done.shape[0])
-        freq_mix = self.text_handler.get_freq_words(reviews_done,'Mixed',reviews_done.shape[0])
-        freq_neu = self.text_handler.get_freq_words(reviews_done,'Neutral',reviews_done.shape[0])
-        
+        slider = st.slider("", 10, reviews_done.shape[0])
+        freq_pos = self.text_handler.get_freq_words(reviews_done, 'Positive',slider)
+        freq_neg = self.text_handler.get_freq_words(reviews_done,'Negative',slider)
+        freq_mix = self.text_handler.get_freq_words(reviews_done,'Mixed',slider)
+        freq_neu = self.text_handler.get_freq_words(reviews_done,'Neutral',slider)
+        print(freq_neg)
         all_sent = [freq_pos,freq_neu,freq_mix,freq_neu]
         freq_all = pd.concat(all_sent).reset_index(drop = True)
         freq_unique = freq_all.groupby('Palavra')['Quantidade','Sentimentação'].max().reset_index()
         
         mask_pos = freq_unique['Sentimentação'] == 'Positive'
         list_pos = freq_unique[mask_pos]['Palavra']
-        
+        print(list_pos)
         mask_neg = freq_unique['Sentimentação'] == 'Negative'
         list_neg = freq_unique[mask_neg]['Palavra']
         
@@ -303,16 +304,14 @@ class Application():
         
         mask_neu = freq_unique['Sentimentação'] == 'Neutral'
         list_neu = freq_unique[mask_neu]['Palavra']
-        
         color_to_words = {
             "#218d21": list_pos,
             "red": list_neg,
             "#FE7B2F": list_mix,
             "#0BD5D2": list_neu
         }
-        
+        print(mask_pos)
         default_color = 'grey'
-        
         grouped_color_func = SimpleGroupedColorFunc(color_to_words, default_color)
         records = freq_all[['Palavra','Quantidade']].to_records(index = False)
         frequencies = dict(list(records))
