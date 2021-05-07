@@ -11,11 +11,17 @@ import pickle
 import sklearn
 import string
 from PIL import Image
-from wordcloud import WordCloud, STOPWORDS, ImageColorGenerator
+from wordcloud import WordCloud, STOPWORDS, ImageColorGenerator,get_single_color_func
 import numpy as np
 from io import BytesIO
 import base64
 nltk.download('punkt')
+class SimpleGroupedColorFunc(object):
+    def __init__(self, color_to_words, default_color):
+        self.word_to_color = {word: color for (color, words) in color_to_words.items() for word in words}
+        self.default_color = default_color
+    def __call__(self, word, **kwargs):
+	    return self.word_to_color.get(word, self.default_color)
 
 class Predictor():
     def __init__(self, df):
@@ -103,6 +109,19 @@ class TextHandler():
         words_dist_stop = nltk.FreqDist(w for w in words_text if w not in self.stop_words)
         words_common = pd.DataFrame(words_dist_stop.most_common(top_n), columns=['Palavra', 'Quantidade'])
         return words_common
+    
+    def get_freq_words(self, reviews_done, sent, top_n=10):
+        df_sent = reviews_done[reviews_done['Sentimentação'] == sent]
+        txt = df_sent['Review']
+        txt = txt.apply(self.clean_freq_word)    
+        txt = txt.str.cat(sep = ' ')
+        words_txt = nltk.tokenize.word_tokenize(txt)
+        words_dist = nltk.FreqDist(words_txt)
+        words_dist_stop = nltk.FreqDist(w for w in words_txt if w not in self.stop_words)
+        words_common = pd.DataFrame(words_dist_stop.most_common(top_n), columns = ['Palavra','Quantidade'])
+		
+        words_common['Sentimentação'] = sent
+        return words_common
 
 class Application():
     def __init__(self):
@@ -114,7 +133,7 @@ class Application():
         st.markdown('<h1 style = "border-radius: 50px; color: #FFFFFF;text-align:center;text-transform: uppercase; background:-webkit-linear-gradient(#FD6E1B, #DB2F40);">Análise de Comentários - MVP</h1>',unsafe_allow_html=True)
         st.text("")
         st.text("")
-        st.markdown("<p style = 'text-align: center; color: #7E7E7E; font-size: 20px'> Lorem Ipsum is simply dummy text of the printing and typesetting industry. Lorem Ipsum has been the industry's standard dummy</p>", unsafe_allow_html=True )
+        st.markdown("<p style = 'text-align: center; color: #7E7E7E; font-size: 20px'>Plataforma em estágio MVP, que permite uma análise exploratória e aplicação de modelos de sentimentação em um volume de comentários, obtendo insight’s sobre o engajamento da publicação. </p>", unsafe_allow_html=True )
 
 
     def render_load_file(self):
@@ -128,8 +147,18 @@ class Application():
     
     def render_frequency_words(self):
         st.markdown("<h2 style ='text-align: center; color: #FD6E1B;'> Palavras mais Frequentes</h2>",unsafe_allow_html=True)
-        st.markdown("<p style = 'text-align: center; color: #7E7E7E; font-size:20px'> Lorem Ipsum is simply dummy text of the printing and typesetting industry. Lorem Ipsum has been the industry's standard dummy</p>", unsafe_allow_html=True )
+        st.markdown("<p style = 'text-align: center; color: #7E7E7E; font-size:20px'> Levantamento da frequência de repetição de palavras. Selecione no slider abaixo, a quantidade de palavras para exibição. Clique no botão abaixo, para download da planilha com esta métrica.</p>", unsafe_allow_html=True )
+        col1, col2 = st.beta_columns(2)
         
+        with col1:
+            st.markdown("<h3 style = 'text-align: center'> Total de Comentários </h3>", unsafe_allow_html = True)
+            comentarios_totais = self.df['Comentario'].shape[0]
+            st.markdown("<p style = 'text-align: center'>" + str(comentarios_totais) + '</p>', unsafe_allow_html=True)
+        with col2:
+            st.markdown("<h3 style = 'text-align: center'> Comentários Únicos </h3>", unsafe_allow_html=True)
+            comentarios_unicos = self.df['Comentario'].unique().shape[0]
+            st.markdown('<p style = "text-align: center">' + str(comentarios_unicos) + '</p>', unsafe_allow_html=True)
+            
         col1, col2  = st.beta_columns(2)
         st.markdown('<p style ="color: #7E7E7E; text-align: center; font-size: 15px"> Arraste para o valor desejado, entre 0 à 30: </p>',unsafe_allow_html = True),
         top_n = st.slider("",0, 30,10)
@@ -150,12 +179,12 @@ class Application():
         st.altair_chart(c, use_container_width=True)
         st.markdown(self.text_handler.get_table_download_link(words_common), unsafe_allow_html=True)
 
-                         
-
     def render_hashtags_users_counters(self):
         st.markdown("<h3 style = 'text-align: center; color: #FD6E1B; font-size: 30px'> Contador de Hashtags </h3>",unsafe_allow_html= True)
-        #st.markdown()
-        top_numbers = st.slider('Digite o número de palavras mais frequentes que deseja visualizar:', 0, 30,10, key ='2')
+        st.markdown("<p style = 'text-align: center; color: #7E7E7E; font-size:20px'> Levantamento da frequência de hashtags e usuário.Selecione no slider abaixo, a quantidade de palavras para exibição. Clique no botão abaixo, para download da planilha com esta métrica.</p>", unsafe_allow_html=True )
+
+        st.markdown('<p style ="color: #7E7E7E; text-align: center; font-size: 15px"> Arraste para o valor desejado, entre 0 à 30: </p>',unsafe_allow_html = True),
+        top_numbers = st.slider('', 0, 30,10, key ='2')
         txt = self.df['Comentario']
             
         txt_hash = txt.str.cat(sep = " ")
@@ -178,6 +207,7 @@ class Application():
             st.markdown(self.text_handler.get_table_download_link(hashtags_common), unsafe_allow_html=True)
         #########################
         st.markdown("<h3 style = 'text-align: center; color: #FD6E1B; font-size:30px'> Usuários mais mencionados</h3>", unsafe_allow_html=True )
+
         #p = re.compile(r'@([^\s:]+)')
         col1, col2 = st.beta_columns([3,1])
         txt_mentions = txt.str.cat(sep = " ")
@@ -197,7 +227,6 @@ class Application():
             st.table(mentions_list.head(5))
             st.markdown(self.text_handler.get_table_download_link(mentions_list), unsafe_allow_html=True)
 
-        
     def render_sentimentation(self):
         def make_prediction_sent(text):   
             with open('model_sent_3011','rb') as f:
@@ -221,16 +250,18 @@ class Application():
             text = re.sub('\w*\d\w*', '', text) # removendo digitos
             text = re.sub('\n', '', text) # Removendo quebras de linha
             return text
-        st.markdown("<h3 style = 'text-align: center'> Sentimentação </h3>", unsafe_allow_html=True)
+        st.markdown("<h2 style = 'text-align: center; color: #FD6E1B'> Sentimentação </h3>", unsafe_allow_html=True)
+        st.markdown("<p style = 'text-align: center; color: #7E7E7E; font-size:20px'> Sentimentação dos comentários dos usuários além da nuvem de palavras com os termos mais mencionados. </p>", unsafe_allow_html=True )
+
         reviews = self.df['Comentario']
         reviews_sent = make_prediction_sent(reviews)
         reviews_done = pd.DataFrame({'Review': self.df['Comentario'],
 		'Sentimentação': reviews_sent})
           
-        st.markdown('<style>.positivos{color: #77EB30; font-size: 24px; font-weight: bold, border-right: 5px solid orange;}</style>', unsafe_allow_html=True)
-        st.markdown('<style>.negatives{color: #FF2E36; font-size: 24px; font-weight: bold}</style>', unsafe_allow_html=True)
-        st.markdown('<style>.neutral{color: #7E7E7E; font-size: 24px; font-weight: bold}</style>', unsafe_allow_html=True)
-        st.markdown('<style>.mixed{color: #faca00; font-size: 24px; font-weight: bold}</style>', unsafe_allow_html=True)
+        st.markdown('<style>.positivos{color:#218d21; font-size: 24px; font-weight: bold, border-right: 5px solid orange;}</style>', unsafe_allow_html=True)
+        st.markdown('<style>.negatives{color: red; font-size: 24px; font-weight: bold}</style>', unsafe_allow_html=True)
+        st.markdown('<style>.neutral{color: #0BD5D2; font-size: 24px; font-weight: bold}</style>', unsafe_allow_html=True)
+        st.markdown('<style>.mixed{color: #FE7B2F; font-size: 24px; font-weight: bold}</style>', unsafe_allow_html=True)
 
         col1, col2, col3, col4 = st.beta_columns(4)
         with col1:
@@ -249,20 +280,50 @@ class Application():
             st.subheader("Mixed")
             mixed = reviews_done[reviews_done['Sentimentação'] == 'Mixed'].count()
             st.markdown('<p class="mixed">' + str(mixed[0]) + '</p>', unsafe_allow_html=True)
-    st.set_option('deprecation.showPyplotGlobalUse', False)
+        return reviews_done
+    #st.set_option('deprecation.showPyplotGlobalUse', False)
     
-    def render_wordcloud(self):
-        textos = self.df.dropna(subset=['Comentario'], axis=0)['Comentario']
-        all_summary = " ".join(s for s in textos)
+    def render_wordcloud(self, reviews_done):
+        freq_pos = self.text_handler.get_freq_words(reviews_done, 'Positive',reviews_done.shape[0])
+        freq_neg = self.text_handler.get_freq_words(reviews_done,'Negative',reviews_done.shape[0])
+        freq_mix = self.text_handler.get_freq_words(reviews_done,'Mixed',reviews_done.shape[0])
+        freq_neu = self.text_handler.get_freq_words(reviews_done,'Neutral',reviews_done.shape[0])
         
-        wordcloud = WordCloud(max_font_size=80, max_words=1000, background_color="white", colormap="Paired").generate(all_summary)
-        plt.figure(figsize=(10,10))
-        plt.imshow(wordcloud)
-        plt.axis("off")
-        plt.show()
-        st.pyplot() 
-
-
+        all_sent = [freq_pos,freq_neu,freq_mix,freq_neu]
+        freq_all = pd.concat(all_sent).reset_index(drop = True)
+        freq_unique = freq_all.groupby('Palavra')['Quantidade','Sentimentação'].max().reset_index()
+        
+        mask_pos = freq_unique['Sentimentação'] == 'Positive'
+        list_pos = freq_unique[mask_pos]['Palavra']
+        
+        mask_neg = freq_unique['Sentimentação'] == 'Negative'
+        list_neg = freq_unique[mask_neg]['Palavra']
+        
+        mask_mix = freq_unique['Sentimentação'] == 'Mixed'
+        list_mix = freq_unique[mask_mix]['Palavra']
+        
+        mask_neu = freq_unique['Sentimentação'] == 'Neutral'
+        list_neu = freq_unique[mask_neu]['Palavra']
+        
+        color_to_words = {
+            "#218d21": list_pos,
+            "red": list_neg,
+            "#FE7B2F": list_mix,
+            "#0BD5D2": list_neu
+        }
+        
+        default_color = 'grey'
+        
+        grouped_color_func = SimpleGroupedColorFunc(color_to_words, default_color)
+        records = freq_all[['Palavra','Quantidade']].to_records(index = False)
+        frequencies = dict(list(records))
+        wc = WordCloud(collocations=False, background_color= 'white').fit_words(frequencies)
+        wc.recolor(color_func=grouped_color_func)
+        plt.figure(figsize = (12,10))
+        plt.imshow(wc,interpolation='bilinear')
+        plt.axis('off')
+        st.image(wc.to_array(),width = 600,)
+        
     def render_app(self):
         st.set_page_config(page_title='Análise de Comentários - MVP',
                            layout='centered', page_icon= "assets/di_produto_rank2.png",
@@ -276,8 +337,8 @@ class Application():
             st.image("assets/horizontal_line.png")
             self.render_hashtags_users_counters()
             st.image("assets/horizontal_line.png")
-            self.render_sentimentation()
-            self.render_wordcloud()
+            df = self.render_sentimentation()
+            self.render_wordcloud(df)
         
         
 app = Application()
